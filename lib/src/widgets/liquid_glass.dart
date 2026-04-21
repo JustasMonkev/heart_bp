@@ -168,6 +168,22 @@ class GlassButton extends StatelessWidget {
   final bool primary;
   final bool dense;
 
+  Widget _buildLabel(Color color) {
+    return Flexible(
+      child: Text(
+        label,
+        overflow: TextOverflow.fade,
+        softWrap: false,
+        style: TextStyle(
+          color: color,
+          fontWeight: FontWeight.w600,
+          fontSize: 16,
+          letterSpacing: -0.2,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final disabled = onPressed == null;
@@ -205,21 +221,14 @@ class GlassButton extends StatelessWidget {
               child: Padding(
                 padding: EdgeInsets.symmetric(horizontal: 24, vertical: vertical),
                 child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     if (icon != null) ...[
                       Icon(icon, color: Colors.white, size: 19),
                       const SizedBox(width: 10),
                     ],
-                    Text(
-                      label,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 16,
-                        letterSpacing: -0.2,
-                      ),
-                    ),
+                    _buildLabel(Colors.white),
                   ],
                 ),
               ),
@@ -229,31 +238,21 @@ class GlassButton extends StatelessWidget {
       );
     }
 
+    final inkColor = disabled ? LiquidTheme.inkFaint : LiquidTheme.ink;
     return GlassSurface(
       radius: radius,
       padding: EdgeInsets.symmetric(horizontal: 24, vertical: vertical),
       opacity: disabled ? 0.35 : 0.55,
       onTap: onPressed,
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           if (icon != null) ...[
-            Icon(
-              icon,
-              color: disabled ? LiquidTheme.inkFaint : LiquidTheme.ink,
-              size: 19,
-            ),
+            Icon(icon, color: inkColor, size: 19),
             const SizedBox(width: 10),
           ],
-          Text(
-            label,
-            style: TextStyle(
-              color: disabled ? LiquidTheme.inkFaint : LiquidTheme.ink,
-              fontWeight: FontWeight.w600,
-              fontSize: 16,
-              letterSpacing: -0.2,
-            ),
-          ),
+          _buildLabel(inkColor),
         ],
       ),
     );

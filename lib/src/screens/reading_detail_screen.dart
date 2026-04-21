@@ -3,10 +3,10 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-import '../app.dart' show levelColor;
 import '../data/reading_repository.dart';
 import '../models/reading.dart';
 import '../theme/liquid_theme.dart';
+import '../theme/pressure_palette.dart';
 import '../widgets/liquid_glass.dart';
 import '../widgets/zoomable_photo.dart';
 

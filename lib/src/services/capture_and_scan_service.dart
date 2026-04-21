@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:camera/camera.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
@@ -9,6 +8,7 @@ import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import '../navigation/heart_page_route.dart';
 import 'ocr_parser.dart';
 
 class ScanCaptureResult {
@@ -27,8 +27,6 @@ class ScanCaptureResult {
 
 abstract class CaptureAndScanService {
   Future<ScanCaptureResult?> captureReading(BuildContext context);
-
-  Future<ScanCaptureResult?> pickReadingFromFiles(BuildContext context);
 }
 
 class CameraCaptureAndScanService implements CaptureAndScanService {
@@ -44,37 +42,13 @@ class CameraCaptureAndScanService implements CaptureAndScanService {
   @override
   Future<ScanCaptureResult?> captureReading(BuildContext context) {
     return Navigator.of(context).push<ScanCaptureResult>(
-      MaterialPageRoute(
+      buildHeartRoute<ScanCaptureResult>(
+        fullscreenDialog: true,
         builder: (_) => _ScanScreen(
           parser: _parser,
           camerasProvider: _camerasProvider,
         ),
-        fullscreenDialog: true,
       ),
-    );
-  }
-
-  @override
-  Future<ScanCaptureResult?> pickReadingFromFiles(BuildContext context) async {
-    final result = await FilePicker.pickFiles(
-      type: FileType.image,
-      allowMultiple: false,
-    );
-    if (result == null || result.files.isEmpty) {
-      return null;
-    }
-
-    final selectedFile = result.files.first;
-    final sourcePath = selectedFile.path;
-    if (sourcePath == null) {
-      return null;
-    }
-
-    final capturedAt = DateTime.now();
-    final persistedImage = await _persistPhoto(sourcePath, capturedAt);
-    return _extractReadingFromImage(
-      imagePath: persistedImage.path,
-      capturedAt: capturedAt,
     );
   }
 
@@ -85,7 +59,9 @@ class CameraCaptureAndScanService implements CaptureAndScanService {
     );
     await photosDirectory.create(recursive: true);
 
-    final extension = p.extension(sourcePath).isEmpty ? '.jpg' : p.extension(sourcePath);
+    final extension = p.extension(sourcePath).isEmpty
+        ? '.jpg'
+        : p.extension(sourcePath);
     final targetPath = p.join(
       photosDirectory.path,
       'reading-${capturedAt.millisecondsSinceEpoch}$extension',

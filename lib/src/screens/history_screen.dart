@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:printing/printing.dart';
 
-import '../app.dart' show levelColor;
 import '../data/reading_repository.dart';
 import '../models/reading.dart';
+import '../navigation/heart_page_route.dart';
 import '../theme/liquid_theme.dart';
+import '../theme/pressure_palette.dart';
 import '../widgets/liquid_glass.dart';
 import 'reading_detail_screen.dart';
+
+final _historyDateTime = DateFormat('MMM d · HH:mm');
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({
@@ -42,8 +45,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final formatter = DateFormat('MMM d · HH:mm');
-
     return AmbientBackground(
       child: Scaffold(
         backgroundColor: Colors.transparent,
@@ -88,28 +89,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         final reading = readings[index];
                         return _HistoryTile(
                           reading: reading,
-                          formatter: formatter,
                           onTap: () {
                             Navigator.of(context).push(
-                              PageRouteBuilder<void>(
-                                transitionDuration: const Duration(milliseconds: 320),
-                                pageBuilder: (_, _, _) => ReadingDetailScreen(
+                              buildHeartRoute<void>(
+                                builder: (_) => ReadingDetailScreen(
                                   repository: widget.repository,
                                   reading: reading,
                                 ),
-                                transitionsBuilder: (_, animation, _, child) {
-                                  final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
-                                  return FadeTransition(
-                                    opacity: curved,
-                                    child: SlideTransition(
-                                      position: Tween<Offset>(
-                                        begin: const Offset(0, 0.04),
-                                        end: Offset.zero,
-                                      ).animate(curved),
-                                      child: child,
-                                    ),
-                                  );
-                                },
                               ),
                             );
                           },
@@ -132,12 +118,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
 class _HistoryTile extends StatelessWidget {
   const _HistoryTile({
     required this.reading,
-    required this.formatter,
     required this.onTap,
   });
 
   final Reading reading;
-  final DateFormat formatter;
   final VoidCallback onTap;
 
   @override
@@ -184,7 +168,7 @@ class _HistoryTile extends StatelessWidget {
                 Row(
                   children: [
                     Text(
-                      formatter.format(reading.capturedAt),
+                      _historyDateTime.format(reading.capturedAt),
                       style: LiquidTheme.mono,
                     ),
                     const Padding(

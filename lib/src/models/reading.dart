@@ -16,6 +16,15 @@ enum BloodPressureLevel {
       };
 }
 
+BloodPressureLevel pressureLevelFor(int systolic, int diastolic) {
+  if (systolic > 180 || diastolic > 120) return BloodPressureLevel.crisis;
+  if (systolic >= 140 || diastolic >= 90) return BloodPressureLevel.highStage2;
+  if (systolic >= 130 || diastolic >= 80) return BloodPressureLevel.highStage1;
+  if (systolic < 90 || diastolic < 60) return BloodPressureLevel.low;
+  if (systolic >= 120 && diastolic < 80) return BloodPressureLevel.elevated;
+  return BloodPressureLevel.normal;
+}
+
 class Reading {
   const Reading({
     required this.id,
@@ -41,24 +50,7 @@ class Reading {
   String get systolicDisplayLabel => '$systolic SYS';
   String get diastolicDisplayLabel => '$diastolic DIA';
   String get pulseDisplayLabel => 'Pulse $pulse';
-  BloodPressureLevel get pressureLevel {
-    if (systolic > 180 || diastolic > 120) {
-      return BloodPressureLevel.crisis;
-    }
-    if (systolic >= 140 || diastolic >= 90) {
-      return BloodPressureLevel.highStage2;
-    }
-    if (systolic >= 130 || diastolic >= 80) {
-      return BloodPressureLevel.highStage1;
-    }
-    if (systolic < 90 || diastolic < 60) {
-      return BloodPressureLevel.low;
-    }
-    if (systolic >= 120 && diastolic < 80) {
-      return BloodPressureLevel.elevated;
-    }
-    return BloodPressureLevel.normal;
-  }
+  BloodPressureLevel get pressureLevel => pressureLevelFor(systolic, diastolic);
 
   Map<String, Object?> toMap() {
     return {

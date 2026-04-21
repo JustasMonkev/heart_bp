@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import '../navigation/heart_page_route.dart';
+
 class ZoomablePhoto extends StatelessWidget {
   const ZoomablePhoto({
     super.key,
@@ -26,7 +28,7 @@ class ZoomablePhoto extends StatelessWidget {
         borderRadius: borderRadius,
         onTap: () {
           Navigator.of(context).push(
-            MaterialPageRoute<void>(
+            buildHeartRoute<void>(
               builder: (_) => _PhotoViewerScreen(
                 imagePath: imagePath,
                 semanticLabel: semanticLabel,
