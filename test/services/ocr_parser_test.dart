@@ -32,6 +32,25 @@ DIA mmHg
       expect(result.pulse, 62);
     });
 
+    test(
+      'extracts readings from monitor-style stacked numbers with date noise',
+      () {
+        const rawText = '''
+M 9 D 4
+929
+68
+153
+77
+''';
+
+        final result = parser.parse(rawText);
+
+        expect(result.systolic, 153);
+        expect(result.diastolic, 77);
+        expect(result.pulse, 68);
+      },
+    );
+
     test('returns partial results when some metrics are missing', () {
       const rawText = '''
 SYS 128

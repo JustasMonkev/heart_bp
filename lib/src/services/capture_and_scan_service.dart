@@ -9,6 +9,8 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../navigation/heart_page_route.dart';
+import '../services/blood_pressure_tips.dart';
+import '../widgets/scan_processing_view.dart';
 import 'ocr_parser.dart';
 
 class ScanCaptureResult {
@@ -33,8 +35,8 @@ class CameraCaptureAndScanService implements CaptureAndScanService {
   CameraCaptureAndScanService({
     OcrParser? parser,
     Future<List<CameraDescription>> Function()? camerasProvider,
-  })  : _parser = parser ?? OcrParser(),
-        _camerasProvider = camerasProvider ?? availableCameras;
+  }) : _parser = parser ?? OcrParser(),
+       _camerasProvider = camerasProvider ?? availableCameras;
 
   final OcrParser _parser;
   final Future<List<CameraDescription>> Function() _camerasProvider;
@@ -44,10 +46,8 @@ class CameraCaptureAndScanService implements CaptureAndScanService {
     return Navigator.of(context).push<ScanCaptureResult>(
       buildHeartRoute<ScanCaptureResult>(
         fullscreenDialog: true,
-        builder: (_) => _ScanScreen(
-          parser: _parser,
-          camerasProvider: _camerasProvider,
-        ),
+        builder: (_) =>
+            _ScanScreen(parser: _parser, camerasProvider: _camerasProvider),
       ),
     );
   }
@@ -82,7 +82,8 @@ class CameraCaptureAndScanService implements CaptureAndScanService {
       );
       var parsed = _parser.parseBest(displayTexts);
 
-      final needsTargeted = parsed.systolic == null ||
+      final needsTargeted =
+          parsed.systolic == null ||
           parsed.diastolic == null ||
           parsed.pulse == null;
       if (needsTargeted) {
@@ -95,7 +96,9 @@ class CameraCaptureAndScanService implements CaptureAndScanService {
           systolic: targetedMetrics['systolic'],
           diastolic: targetedMetrics['diastolic'],
           pulse: targetedMetrics['pulse'],
-          rawText: displayTexts.where((text) => text.trim().isNotEmpty).join('\n'),
+          rawText: displayTexts
+              .where((text) => text.trim().isNotEmpty)
+              .join('\n'),
         );
       }
 
@@ -117,13 +120,11 @@ class CameraCaptureAndScanService implements CaptureAndScanService {
 
   Future<Map<String, List<String>>> _prepareOcrImages(String imagePath) async {
     final tempDirectory = await getTemporaryDirectory();
-    final preparedImages = await compute<Map<String, String>, Map<String, List<String>>>(
-      _buildPreparedOcrImages,
-      {
-        'imagePath': imagePath,
-        'tempDir': tempDirectory.path,
-      },
-    );
+    final preparedImages =
+        await compute<Map<String, String>, Map<String, List<String>>>(
+          _buildPreparedOcrImages,
+          {'imagePath': imagePath, 'tempDir': tempDirectory.path},
+        );
     return preparedImages;
   }
 
@@ -167,7 +168,8 @@ class CameraCaptureAndScanService implements CaptureAndScanService {
     final diastolicParsed = _parser.parseBest(diastolicTexts);
 
     return {
-      'pulse': pulseParsed.pulse ??
+      'pulse':
+          pulseParsed.pulse ??
           _parser.bestMetricValue(
             pulseTexts,
             min: 30,
@@ -175,7 +177,8 @@ class CameraCaptureAndScanService implements CaptureAndScanService {
             preferredMin: 40,
             preferredMax: 120,
           ),
-      'systolic': systolicParsed.systolic ??
+      'systolic':
+          systolicParsed.systolic ??
           _parser.bestMetricValue(
             systolicTexts,
             min: 50,
@@ -183,7 +186,8 @@ class CameraCaptureAndScanService implements CaptureAndScanService {
             preferredMin: 90,
             preferredMax: 190,
           ),
-      'diastolic': diastolicParsed.diastolic ??
+      'diastolic':
+          diastolicParsed.diastolic ??
           _parser.bestMetricValue(
             diastolicTexts,
             min: 30,
@@ -230,10 +234,7 @@ Map<String, List<String>> _buildPreparedOcrImages(Map<String, String> request) {
   final basename = p.basenameWithoutExtension(imagePath);
 
   final variantMap = <String, List<img.Image>>{
-    'display': [
-      crops.display,
-      _enhanceForOcr(crops.display),
-    ],
+    'display': [crops.display, _enhanceForOcr(crops.display)],
     'pulse': [_enhanceForOcr(crops.pulse)],
     'systolic': [_enhanceForOcr(crops.systolic)],
     'diastolic': [_enhanceForOcr(crops.diastolic)],
@@ -247,7 +248,9 @@ Map<String, List<String>> _buildPreparedOcrImages(Map<String, String> request) {
         variantsDirectory.path,
         '$basename-${entry.key}-$index.jpg',
       );
-      File(path).writeAsBytesSync(img.encodeJpg(entry.value[index], quality: 90));
+      File(
+        path,
+      ).writeAsBytesSync(img.encodeJpg(entry.value[index], quality: 90));
       paths.add(path);
     }
     output[entry.key] = paths;
@@ -273,17 +276,19 @@ img.Image _resizeForOcr(img.Image source) {
 
 _OcrCropSet _planOcrCrops(img.Image source) {
   final dividerX = _estimateDividerX(source);
-  final displayLeft = (dividerX - source.width * 0.42)
-      .round()
-      .clamp(0, dividerX - 12);
-  final displayRight = (dividerX - source.width * 0.01)
-      .round()
-      .clamp(displayLeft + 20, source.width);
+  final displayLeft = (dividerX - source.width * 0.42).round().clamp(
+    0,
+    dividerX - 12,
+  );
+  final displayRight = (dividerX - source.width * 0.01).round().clamp(
+    displayLeft + 20,
+    source.width,
+  );
   final displayTop = (source.height * 0.05).round();
   final displayBottom = (source.height * 0.95).round().clamp(
-        displayTop + 20,
-        source.height,
-      );
+    displayTop + 20,
+    source.height,
+  );
 
   final display = img.copyCrop(
     source,
@@ -295,9 +300,27 @@ _OcrCropSet _planOcrCrops(img.Image source) {
 
   return _OcrCropSet(
     display: display,
-    pulse: _copyRelativeCrop(display, x: 0.10, y: 0.17, width: 0.80, height: 0.21),
-    systolic: _copyRelativeCrop(display, x: 0.08, y: 0.37, width: 0.82, height: 0.24),
-    diastolic: _copyRelativeCrop(display, x: 0.08, y: 0.54, width: 0.82, height: 0.24),
+    pulse: _copyRelativeCrop(
+      display,
+      x: 0.10,
+      y: 0.17,
+      width: 0.80,
+      height: 0.21,
+    ),
+    systolic: _copyRelativeCrop(
+      display,
+      x: 0.08,
+      y: 0.37,
+      width: 0.82,
+      height: 0.24,
+    ),
+    diastolic: _copyRelativeCrop(
+      display,
+      x: 0.08,
+      y: 0.54,
+      width: 0.82,
+      height: 0.24,
+    ),
   );
 }
 
@@ -321,13 +344,12 @@ int _estimateDividerX(img.Image source) {
 
   final smoothed = brightness.toList();
   for (var x = startX + 2; x < endX - 2; x++) {
-    smoothed[x] = (
-          brightness[x - 2] +
-          brightness[x - 1] +
-          brightness[x] +
-          brightness[x + 1] +
-          brightness[x + 2]
-        ) /
+    smoothed[x] =
+        (brightness[x - 2] +
+            brightness[x - 1] +
+            brightness[x] +
+            brightness[x + 1] +
+            brightness[x + 2]) /
         5;
   }
 
@@ -341,7 +363,10 @@ int _estimateDividerX(img.Image source) {
     }
   }
 
-  return bestX.clamp((source.width * 0.45).round(), (source.width * 0.66).round());
+  return bestX.clamp(
+    (source.width * 0.45).round(),
+    (source.width * 0.66).round(),
+  );
 }
 
 double _pixelLuminance(img.Pixel pixel) {
@@ -360,10 +385,14 @@ img.Image _copyRelativeCrop(
 }) {
   final left = (source.width * x).round().clamp(0, source.width - 1);
   final top = (source.height * y).round().clamp(0, source.height - 1);
-  final cropWidth = (source.width * width).round().clamp(1, source.width - left);
-  final cropHeight = (source.height * height)
-      .round()
-      .clamp(1, source.height - top);
+  final cropWidth = (source.width * width).round().clamp(
+    1,
+    source.width - left,
+  );
+  final cropHeight = (source.height * height).round().clamp(
+    1,
+    source.height - top,
+  );
 
   return img.copyCrop(
     source,
@@ -382,12 +411,7 @@ img.Image _enhanceForOcr(img.Image source) {
     interpolation: img.Interpolation.average,
   );
   img.grayscale(resized);
-  img.adjustColor(
-    resized,
-    contrast: 1.65,
-    brightness: 1.06,
-    gamma: 0.92,
-  );
+  img.adjustColor(resized, contrast: 1.65, brightness: 1.06, gamma: 0.92);
   return resized;
 }
 
@@ -406,10 +430,7 @@ class _OcrCropSet {
 }
 
 class _ScanScreen extends StatefulWidget {
-  const _ScanScreen({
-    required this.parser,
-    required this.camerasProvider,
-  });
+  const _ScanScreen({required this.parser, required this.camerasProvider});
 
   final OcrParser parser;
   final Future<List<CameraDescription>> Function() camerasProvider;
@@ -423,6 +444,7 @@ class _ScanScreenState extends State<_ScanScreen> {
   bool _isReady = false;
   bool _isCapturing = false;
   String? _errorMessage;
+  BloodPressureTip? _processingTip;
   late final CameraCaptureAndScanService _extractionService;
 
   @override
@@ -494,7 +516,11 @@ class _ScanScreenState extends State<_ScanScreen> {
     setState(() {
       _isCapturing = true;
       _errorMessage = null;
+      _processingTip = BloodPressureTips.tipForSeed(
+        DateTime.now().microsecondsSinceEpoch,
+      );
     });
+    await WidgetsBinding.instance.endOfFrame;
 
     try {
       final photo = await controller.takePicture();
@@ -517,6 +543,7 @@ class _ScanScreenState extends State<_ScanScreen> {
       setState(() {
         _errorMessage = 'Capture failed. You can try again. $error';
         _isCapturing = false;
+        _processingTip = null;
       });
     }
   }
@@ -531,29 +558,58 @@ class _ScanScreenState extends State<_ScanScreen> {
           child: Column(
             children: [
               Expanded(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(28),
-                  child: _buildCameraBody(),
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 260),
+                  switchInCurve: Curves.easeOutCubic,
+                  switchOutCurve: Curves.easeInCubic,
+                  transitionBuilder: (child, animation) {
+                    return FadeTransition(
+                      opacity: animation,
+                      child: ScaleTransition(
+                        scale: Tween<double>(begin: 0.98, end: 1).animate(
+                          CurvedAnimation(
+                            parent: animation,
+                            curve: Curves.easeOutCubic,
+                          ),
+                        ),
+                        child: child,
+                      ),
+                    );
+                  },
+                  child: ClipRRect(
+                    key: ValueKey<String>(
+                      _isCapturing ? 'processing' : 'camera-body',
+                    ),
+                    borderRadius: BorderRadius.circular(28),
+                    child: _buildCameraBody(),
+                  ),
                 ),
               ),
               const SizedBox(height: 16),
-              Text(
-                'Keep the monitor display large in frame and avoid glare on the screen. The app now prioritizes the left display area for OCR.',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyLarge,
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 220),
+                child: Text(
+                  _isCapturing
+                      ? 'Reading the saved photo now. This usually takes a few seconds.'
+                      : 'Keep the monitor display large in frame and avoid glare on the screen. The app now prioritizes the left display area for OCR.',
+                  key: ValueKey<String>(
+                    _isCapturing ? 'processing-copy' : 'capture-copy',
+                  ),
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodyLarge,
+                ),
               ),
               const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
                 child: FilledButton.icon(
                   onPressed: _isReady && !_isCapturing ? _capture : null,
-                  icon: _isCapturing
-                      ? const SizedBox.square(
-                          dimension: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.camera_alt_outlined),
-                  label: Text(_isCapturing ? 'Processing...' : 'Capture'),
+                  icon: Icon(
+                    _isCapturing
+                        ? Icons.hourglass_top_rounded
+                        : Icons.camera_alt_outlined,
+                  ),
+                  label: Text(_isCapturing ? 'Analyzing…' : 'Capture'),
                 ),
               ),
             ],
@@ -564,6 +620,12 @@ class _ScanScreenState extends State<_ScanScreen> {
   }
 
   Widget _buildCameraBody() {
+    if (_isCapturing) {
+      return ScanProcessingView(
+        tip: _processingTip ?? BloodPressureTips.tipForSeed(0),
+      );
+    }
+
     if (_errorMessage != null) {
       return Container(
         color: Colors.black12,
@@ -574,10 +636,7 @@ class _ScanScreenState extends State<_ScanScreen> {
             children: [
               const Icon(Icons.camera_alt_outlined, size: 48),
               const SizedBox(height: 12),
-              Text(
-                _errorMessage!,
-                textAlign: TextAlign.center,
-              ),
+              Text(_errorMessage!, textAlign: TextAlign.center),
               const SizedBox(height: 12),
               OutlinedButton(
                 onPressed: _isCapturing ? null : _initializeCamera,
@@ -611,42 +670,6 @@ class _ScanScreenState extends State<_ScanScreen> {
             ),
           ),
         ),
-        if (_isCapturing)
-          Positioned.fill(
-            child: ColoredBox(
-              color: Colors.black.withValues(alpha: 0.6),
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const SizedBox.square(
-                      dimension: 56,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 4,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    Text(
-                      'Reading your monitor…',
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleMedium
-                          ?.copyWith(color: Colors.white),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Hold still for a moment.',
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodyMedium
-                          ?.copyWith(color: Colors.white70),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
       ],
     );
   }

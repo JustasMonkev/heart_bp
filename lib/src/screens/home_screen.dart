@@ -37,7 +37,9 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isSaving = false;
 
   Future<void> _startScan() async {
-    final scanResult = await widget.captureAndScanService.captureReading(context);
+    final scanResult = await widget.captureAndScanService.captureReading(
+      context,
+    );
     await _handleScanResult(scanResult);
   }
 
@@ -63,9 +65,9 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not save reading: $error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not save reading: $error')));
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -79,9 +81,9 @@ class _HomeScreenState extends State<HomeScreen> {
     );
 
     if (!mounted || saved != true) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Manual reading saved.')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Manual reading saved.')));
   }
 
   void _openHistory() {
@@ -192,7 +194,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   if (readings.isEmpty)
                     const _EmptyRecentCard()
                   else
-                    ...readings.take(4).map(
+                    ...readings
+                        .take(4)
+                        .map(
                           (reading) => Padding(
                             padding: const EdgeInsets.only(bottom: 10),
                             child: _RecentTile(
@@ -228,7 +232,10 @@ class _HomeHeader extends StatelessWidget {
               children: [
                 Text(date, style: LiquidTheme.eyebrow),
                 const SizedBox(height: 4),
-                Text('Heart', style: LiquidTheme.displayM.copyWith(fontSize: 40)),
+                Text(
+                  'Heart',
+                  style: LiquidTheme.displayM.copyWith(fontSize: 40),
+                ),
               ],
             ),
           ),
@@ -251,10 +258,7 @@ class _HomeHeader extends StatelessWidget {
 }
 
 class _LatestReadingCard extends StatelessWidget {
-  const _LatestReadingCard({
-    super.key,
-    required this.reading,
-  });
+  const _LatestReadingCard({super.key, required this.reading});
 
   final Reading reading;
 
@@ -295,7 +299,10 @@ class _LatestReadingCard extends StatelessWidget {
               Text(reading.diastolic.toString(), style: LiquidTheme.numeralXL),
               Padding(
                 padding: const EdgeInsets.only(left: 8, bottom: 16),
-                child: Text('mmHg', style: LiquidTheme.bodyMuted.copyWith(fontSize: 16)),
+                child: Text(
+                  'mmHg',
+                  style: LiquidTheme.bodyMuted.copyWith(fontSize: 16),
+                ),
               ),
             ],
           ),
@@ -352,15 +359,15 @@ class _EmptyLatestCard extends StatelessWidget {
 }
 
 class _TrendCard extends StatelessWidget {
-  const _TrendCard({
-    required this.summary,
-  });
+  const _TrendCard({required this.summary});
 
   final _HomeSummary summary;
 
   @override
   Widget build(BuildContext context) {
-    final trendColor = summary.delta <= 0 ? LiquidTheme.mint : LiquidTheme.accent;
+    final trendColor = summary.delta <= 0
+        ? LiquidTheme.mint
+        : LiquidTheme.accent;
     return GlassSurface(
       radius: 34,
       padding: const EdgeInsets.fromLTRB(22, 22, 22, 18),
@@ -438,10 +445,7 @@ class _AverageTile extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             '$value',
-            style: LiquidTheme.numeralL.copyWith(
-              fontSize: 28,
-              color: accent,
-            ),
+            style: LiquidTheme.numeralL.copyWith(fontSize: 28, color: accent),
           ),
           Text(unit, style: LiquidTheme.bodyMuted),
         ],
@@ -451,9 +455,7 @@ class _AverageTile extends StatelessWidget {
 }
 
 class _InsightCard extends StatelessWidget {
-  const _InsightCard({
-    required this.summary,
-  });
+  const _InsightCard({required this.summary});
 
   final _HomeSummary summary;
 
@@ -477,10 +479,7 @@ class _InsightCard extends StatelessWidget {
               ),
               shape: BoxShape.circle,
             ),
-            child: const Icon(
-              Icons.lightbulb_rounded,
-              color: Colors.white,
-            ),
+            child: const Icon(Icons.lightbulb_rounded, color: Colors.white),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -500,10 +499,7 @@ class _InsightCard extends StatelessWidget {
 }
 
 class _RecentTile extends StatelessWidget {
-  const _RecentTile({
-    required this.reading,
-    required this.onTap,
-  });
+  const _RecentTile({required this.reading, required this.onTap});
 
   final Reading reading;
   final VoidCallback onTap;
@@ -545,7 +541,11 @@ class _RecentTile extends StatelessWidget {
               ],
             ),
           ),
-          _StatusChip(label: reading.pressureLevel.label, color: color, compact: true),
+          _StatusChip(
+            label: reading.pressureLevel.label,
+            color: color,
+            compact: true,
+          ),
           const SizedBox(width: 8),
           const Icon(
             Icons.chevron_right_rounded,
@@ -623,26 +623,37 @@ class _StatusChip extends StatelessWidget {
 }
 
 class _TrendPainter extends CustomPainter {
-  const _TrendPainter({
-    required this.values,
-  });
+  const _TrendPainter({required this.values});
 
-  final List<int> values;
+  final List<int?> values;
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (values.isEmpty) return;
+    final plottedValues = <({int index, int value})>[];
+    for (var index = 0; index < values.length; index++) {
+      final value = values[index];
+      if (value != null) {
+        plottedValues.add((index: index, value: value));
+      }
+    }
+    if (plottedValues.isEmpty) return;
 
-    final maxValue = values.reduce(math.max).toDouble();
-    final minValue = values.reduce(math.min).toDouble();
+    final maxValue = plottedValues
+        .map((item) => item.value)
+        .reduce(math.max)
+        .toDouble();
+    final minValue = plottedValues
+        .map((item) => item.value)
+        .reduce(math.min)
+        .toDouble();
     final span = math.max(1.0, maxValue - minValue);
     final step = values.length == 1 ? 0.0 : size.width / (values.length - 1);
     final points = <Offset>[];
 
-    for (var i = 0; i < values.length; i++) {
-      final normalized = (values[i] - minValue) / span;
+    for (final item in plottedValues) {
+      final normalized = (item.value - minValue) / span;
       final y = size.height - (normalized * (size.height - 8)) - 4;
-      points.add(Offset(step * i, y));
+      points.add(Offset(step * item.index, y));
     }
 
     final fillPath = Path()..moveTo(points.first.dx, size.height);
@@ -686,11 +697,7 @@ class _TrendPainter extends CustomPainter {
         ..strokeCap = StrokeCap.round,
     );
 
-    canvas.drawCircle(
-      points.last,
-      5.5,
-      Paint()..color = LiquidTheme.accent,
-    );
+    canvas.drawCircle(points.last, 5.5, Paint()..color = LiquidTheme.accent);
   }
 
   @override
@@ -722,7 +729,7 @@ class _HomeSummary {
     required this.insightBody,
   });
 
-  final List<int> weeklySystolic;
+  final List<int?> weeklySystolic;
   final List<String> weekdayLabels;
   final int avgSystolic;
   final int avgDiastolic;
@@ -740,24 +747,28 @@ class _HomeSummary {
         : ordered.skip(recentStart).toList();
 
     final now = DateTime.now();
-    final recentByDate = <String, Reading>{};
+    final today = DateTime(now.year, now.month, now.day);
+    final firstVisibleDay = today.subtract(const Duration(days: 6));
+    final systolicByDate = <String, List<int>>{};
     for (final reading in ordered) {
-      recentByDate[_dayKey.format(reading.capturedAt)] = reading;
+      final capturedDay = DateTime(
+        reading.capturedAt.year,
+        reading.capturedAt.month,
+        reading.capturedAt.day,
+      );
+      if (capturedDay.isBefore(firstVisibleDay) || capturedDay.isAfter(today)) {
+        continue;
+      }
+      final key = _dayKey.format(capturedDay);
+      systolicByDate.putIfAbsent(key, () => <int>[]).add(reading.systolic);
     }
 
-    final lastKnown = ordered.isNotEmpty ? ordered.last.systolic : 120;
-    final weekly = <int>[];
+    final weekly = <int?>[];
     final labels = <String>[];
-    var fallback = lastKnown;
     for (var index = 6; index >= 0; index--) {
-      final day = DateTime(now.year, now.month, now.day).subtract(
-        Duration(days: index),
-      );
-      final reading = recentByDate[_dayKey.format(day)];
-      if (reading != null) {
-        fallback = reading.systolic;
-      }
-      weekly.add(fallback);
+      final day = today.subtract(Duration(days: index));
+      final dayValues = systolicByDate[_dayKey.format(day)];
+      weekly.add(dayValues == null ? null : _avg(dayValues, 120));
       labels.add(_weekdayInitial.format(day).substring(0, 1));
     }
 
@@ -773,13 +784,13 @@ class _HomeSummary {
     final insightTitle = morningAvg > eveningAvg + 4
         ? 'BP peaks in the morning'
         : recent.length >= 3
-            ? 'Trend looks steady'
-            : 'Build your baseline';
+        ? 'Trend looks steady'
+        : 'Build your baseline';
     final insightBody = morningAvg > eveningAvg + 4
         ? 'Morning avg $morningAvg/$avgDiastolic — consider checking before coffee.'
         : recent.length >= 3
-            ? 'Your last ${recent.length} readings are staying within a fairly narrow range.'
-            : 'Add a few readings across the week to unlock stronger trend insights.';
+        ? 'Your last ${recent.length} readings are staying within a fairly narrow range.'
+        : 'Add a few readings across the week to unlock stronger trend insights.';
 
     return _HomeSummary(
       weeklySystolic: weekly,
@@ -787,9 +798,15 @@ class _HomeSummary {
       avgSystolic: avgSystolic,
       avgDiastolic: avgDiastolic,
       avgPulse: avgPulse,
-      delta: weekly.last - weekly.first,
+      delta: _weeklyDelta(weekly),
       insightTitle: insightTitle,
       insightBody: insightBody,
     );
   }
+}
+
+int _weeklyDelta(List<int?> weekly) {
+  final actualValues = weekly.whereType<int>().toList(growable: false);
+  if (actualValues.length < 2) return 0;
+  return actualValues.last - actualValues.first;
 }

@@ -28,9 +28,7 @@ void main() {
     );
   }
 
-  testWidgets('shows the redesigned home screen actions', (
-    tester,
-  ) async {
+  testWidgets('shows the redesigned home screen actions', (tester) async {
     await pumpPhoneApp(
       tester,
       repository: _FakeReadingRepository(),
@@ -66,9 +64,7 @@ void main() {
     expect(find.textContaining('Scan your first reading'), findsOneWidget);
   });
 
-  testWidgets('opens quick entry and saves a manual reading', (
-    tester,
-  ) async {
+  testWidgets('opens quick entry and saves a manual reading', (tester) async {
     final repository = _FakeReadingRepository();
 
     await pumpPhoneApp(
@@ -82,11 +78,13 @@ void main() {
     await tester.tap(find.text('Quick entry'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 120));
+    final manualScroll = find.byType(Scrollable).last;
 
     expect(find.text('MANUAL'), findsOneWidget);
+    await tester.drag(manualScroll, const Offset(0, -900));
+    await tester.pumpAndSettle();
     expect(find.text('Save reading'), findsOneWidget);
 
-    await tester.pumpAndSettle();
     await tester.tap(find.text('Save reading'));
     await tester.pumpAndSettle();
 
@@ -95,6 +93,40 @@ void main() {
     expect(repository.savedDrafts.single.diastolicText, '80');
     expect(repository.savedDrafts.single.pulseText, '72');
     expect(find.text('120/80'), findsOneWidget);
+  });
+
+  testWidgets('quick entry accepts typed values before saving', (tester) async {
+    final repository = _FakeReadingRepository();
+
+    await pumpPhoneApp(
+      tester,
+      repository: repository,
+      captureAndScanService: _FakeCaptureAndScanService(),
+    );
+
+    await tester.scrollUntilVisible(find.text('Quick entry'), 300);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Quick entry'));
+    await tester.pumpAndSettle();
+    final manualScroll = find.byType(Scrollable).last;
+
+    expect(find.byType(TextField), findsNWidgets(3));
+
+    await tester.enterText(find.byType(TextField).at(0), '136');
+    await tester.enterText(find.byType(TextField).at(1), '73');
+    await tester.enterText(find.byType(TextField).at(2), '68');
+    await tester.pumpAndSettle();
+
+    await tester.drag(manualScroll, const Offset(0, -900));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save reading'));
+    await tester.pumpAndSettle();
+
+    expect(repository.savedDrafts, hasLength(1));
+    expect(repository.savedDrafts.single.systolicText, '136');
+    expect(repository.savedDrafts.single.diastolicText, '73');
+    expect(repository.savedDrafts.single.pulseText, '68');
+    expect(find.text('136/73'), findsOneWidget);
   });
 }
 
