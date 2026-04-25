@@ -42,7 +42,7 @@ class ScanProcessingView extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'The photo is saved locally. We are extracting SYS, DIA, and pulse now.',
+                  'The photos stay local. We are comparing frames and extracting SYS, DIA, and pulse now.',
                   style: LiquidTheme.body,
                 ),
                 const SizedBox(height: 18),

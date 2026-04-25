@@ -4,14 +4,17 @@ import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
-import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../navigation/heart_page_route.dart';
 import '../services/blood_pressure_tips.dart';
+import '../widgets/scan_guidance_overlay.dart';
 import '../widgets/scan_processing_view.dart';
+import 'ocr_image_preprocessor.dart';
 import 'ocr_parser.dart';
+import 'reading_extraction_resolver.dart';
+import 'seven_segment_display_reader.dart';
 
 class ScanCaptureResult {
   const ScanCaptureResult({
@@ -19,12 +22,43 @@ class ScanCaptureResult {
     required this.rawText,
     required this.parsed,
     required this.capturedAt,
+    this.confidence = ScanConfidenceLevel.low,
+    this.confidenceScore = 0,
+    this.confidenceMessage =
+        'The scan was uncertain. Check the photo before saving.',
+    this.extractionSource = 'OCR',
   });
 
   final String imagePath;
   final String rawText;
   final OcrParseResult parsed;
   final DateTime capturedAt;
+  final ScanConfidenceLevel confidence;
+  final double confidenceScore;
+  final String confidenceMessage;
+  final String extractionSource;
+
+  ScanCaptureResult copyWith({
+    String? imagePath,
+    String? rawText,
+    OcrParseResult? parsed,
+    DateTime? capturedAt,
+    ScanConfidenceLevel? confidence,
+    double? confidenceScore,
+    String? confidenceMessage,
+    String? extractionSource,
+  }) {
+    return ScanCaptureResult(
+      imagePath: imagePath ?? this.imagePath,
+      rawText: rawText ?? this.rawText,
+      parsed: parsed ?? this.parsed,
+      capturedAt: capturedAt ?? this.capturedAt,
+      confidence: confidence ?? this.confidence,
+      confidenceScore: confidenceScore ?? this.confidenceScore,
+      confidenceMessage: confidenceMessage ?? this.confidenceMessage,
+      extractionSource: extractionSource ?? this.extractionSource,
+    );
+  }
 }
 
 abstract class CaptureAndScanService {
@@ -34,11 +68,15 @@ abstract class CaptureAndScanService {
 class CameraCaptureAndScanService implements CaptureAndScanService {
   CameraCaptureAndScanService({
     OcrParser? parser,
+    ReadingExtractionResolver? extractionResolver,
     Future<List<CameraDescription>> Function()? camerasProvider,
   }) : _parser = parser ?? OcrParser(),
+       _extractionResolver =
+           extractionResolver ?? const ReadingExtractionResolver(),
        _camerasProvider = camerasProvider ?? availableCameras;
 
   final OcrParser _parser;
+  final ReadingExtractionResolver _extractionResolver;
   final Future<List<CameraDescription>> Function() _camerasProvider;
 
   @override
@@ -106,15 +144,43 @@ class CameraCaptureAndScanService implements CaptureAndScanService {
         (text) => text.trim().isNotEmpty,
         orElse: () => '',
       );
+      final segmentResult = await _readSevenSegmentDisplay(imagePath);
+      final decision = _extractionResolver.resolve(
+        ocrResult: parsed,
+        segmentResult: segmentResult,
+        rawOcrText: primaryText,
+      );
 
       return ScanCaptureResult(
         imagePath: imagePath,
-        rawText: primaryText,
-        parsed: parsed,
+        rawText: decision.parsed.rawText,
+        parsed: decision.parsed,
         capturedAt: capturedAt,
+        confidence: decision.confidence,
+        confidenceScore: decision.confidenceScore,
+        confidenceMessage: decision.confidenceMessage,
+        extractionSource: decision.extractionSource,
       );
     } finally {
       await recognizer.close();
+    }
+  }
+
+  Future<SevenSegmentDisplayReadResult> _readSevenSegmentDisplay(
+    String imagePath,
+  ) async {
+    try {
+      return await compute<String, SevenSegmentDisplayReadResult>(
+        _readSevenSegmentImage,
+        imagePath,
+      );
+    } catch (_) {
+      return const SevenSegmentDisplayReadResult(
+        systolic: null,
+        diastolic: null,
+        pulse: null,
+        confidence: 0,
+      );
     }
   }
 
@@ -214,219 +280,14 @@ class CameraCaptureAndScanService implements CaptureAndScanService {
 }
 
 Map<String, List<String>> _buildPreparedOcrImages(Map<String, String> request) {
-  final imagePath = request['imagePath']!;
-  final tempDir = request['tempDir']!;
-  final bytes = File(imagePath).readAsBytesSync();
-  final decoded = img.decodeImage(bytes);
-  if (decoded == null) {
-    return {
-      'display': [imagePath],
-      'pulse': [imagePath],
-      'systolic': [imagePath],
-      'diastolic': [imagePath],
-    };
-  }
-
-  final source = _resizeForOcr(decoded);
-  final crops = _planOcrCrops(source);
-  final variantsDirectory = Directory(p.join(tempDir, 'heart_bp_ocr_variants'))
-    ..createSync(recursive: true);
-  final basename = p.basenameWithoutExtension(imagePath);
-
-  final variantMap = <String, List<img.Image>>{
-    'display': [crops.display, _enhanceForOcr(crops.display)],
-    'pulse': [_enhanceForOcr(crops.pulse)],
-    'systolic': [_enhanceForOcr(crops.systolic)],
-    'diastolic': [_enhanceForOcr(crops.diastolic)],
-  };
-
-  final output = <String, List<String>>{};
-  for (final entry in variantMap.entries) {
-    final paths = <String>[];
-    for (var index = 0; index < entry.value.length; index++) {
-      final path = p.join(
-        variantsDirectory.path,
-        '$basename-${entry.key}-$index.jpg',
-      );
-      File(
-        path,
-      ).writeAsBytesSync(img.encodeJpg(entry.value[index], quality: 90));
-      paths.add(path);
-    }
-    output[entry.key] = paths;
-  }
-
-  return output;
-}
-
-img.Image _resizeForOcr(img.Image source) {
-  const maxWidth = 1440;
-  if (source.width <= maxWidth) {
-    return source.clone();
-  }
-
-  final targetHeight = (source.height * (maxWidth / source.width)).round();
-  return img.copyResize(
-    source,
-    width: maxWidth,
-    height: targetHeight,
-    interpolation: img.Interpolation.average,
+  return OcrImagePreprocessor.buildPreparedImageFiles(
+    imagePath: request['imagePath']!,
+    tempDir: request['tempDir']!,
   );
 }
 
-_OcrCropSet _planOcrCrops(img.Image source) {
-  final dividerX = _estimateDividerX(source);
-  final displayLeft = (dividerX - source.width * 0.42).round().clamp(
-    0,
-    dividerX - 12,
-  );
-  final displayRight = (dividerX - source.width * 0.01).round().clamp(
-    displayLeft + 20,
-    source.width,
-  );
-  final displayTop = (source.height * 0.05).round();
-  final displayBottom = (source.height * 0.95).round().clamp(
-    displayTop + 20,
-    source.height,
-  );
-
-  final display = img.copyCrop(
-    source,
-    x: displayLeft,
-    y: displayTop,
-    width: displayRight - displayLeft,
-    height: displayBottom - displayTop,
-  );
-
-  return _OcrCropSet(
-    display: display,
-    pulse: _copyRelativeCrop(
-      display,
-      x: 0.10,
-      y: 0.17,
-      width: 0.80,
-      height: 0.21,
-    ),
-    systolic: _copyRelativeCrop(
-      display,
-      x: 0.08,
-      y: 0.37,
-      width: 0.82,
-      height: 0.24,
-    ),
-    diastolic: _copyRelativeCrop(
-      display,
-      x: 0.08,
-      y: 0.54,
-      width: 0.82,
-      height: 0.24,
-    ),
-  );
-}
-
-int _estimateDividerX(img.Image source) {
-  final startX = (source.width * 0.34).round();
-  final endX = (source.width * 0.80).round();
-  final startY = (source.height * 0.12).round();
-  final endY = (source.height * 0.92).round();
-  final brightness = List<double>.filled(source.width, 0);
-
-  for (var x = startX; x < endX; x++) {
-    var total = 0.0;
-    var count = 0;
-    for (var y = startY; y < endY; y += 6) {
-      final pixel = source.getPixel(x, y);
-      total += _pixelLuminance(pixel);
-      count++;
-    }
-    brightness[x] = count == 0 ? 0 : total / count;
-  }
-
-  final smoothed = brightness.toList();
-  for (var x = startX + 2; x < endX - 2; x++) {
-    smoothed[x] =
-        (brightness[x - 2] +
-            brightness[x - 1] +
-            brightness[x] +
-            brightness[x + 1] +
-            brightness[x + 2]) /
-        5;
-  }
-
-  var bestX = (source.width * 0.56).round();
-  var bestDelta = double.negativeInfinity;
-  for (var x = startX + 4; x < endX - 4; x++) {
-    final delta = smoothed[x + 3] - smoothed[x - 3];
-    if (delta > bestDelta) {
-      bestDelta = delta;
-      bestX = x;
-    }
-  }
-
-  return bestX.clamp(
-    (source.width * 0.45).round(),
-    (source.width * 0.66).round(),
-  );
-}
-
-double _pixelLuminance(img.Pixel pixel) {
-  final red = pixel.r.toDouble();
-  final green = pixel.g.toDouble();
-  final blue = pixel.b.toDouble();
-  return (0.2126 * red) + (0.7152 * green) + (0.0722 * blue);
-}
-
-img.Image _copyRelativeCrop(
-  img.Image source, {
-  required double x,
-  required double y,
-  required double width,
-  required double height,
-}) {
-  final left = (source.width * x).round().clamp(0, source.width - 1);
-  final top = (source.height * y).round().clamp(0, source.height - 1);
-  final cropWidth = (source.width * width).round().clamp(
-    1,
-    source.width - left,
-  );
-  final cropHeight = (source.height * height).round().clamp(
-    1,
-    source.height - top,
-  );
-
-  return img.copyCrop(
-    source,
-    x: left,
-    y: top,
-    width: cropWidth,
-    height: cropHeight,
-  );
-}
-
-img.Image _enhanceForOcr(img.Image source) {
-  final doubledWidth = source.width < 900 ? source.width * 2 : source.width;
-  final resized = img.copyResize(
-    source,
-    width: doubledWidth,
-    interpolation: img.Interpolation.average,
-  );
-  img.grayscale(resized);
-  img.adjustColor(resized, contrast: 1.65, brightness: 1.06, gamma: 0.92);
-  return resized;
-}
-
-class _OcrCropSet {
-  const _OcrCropSet({
-    required this.display,
-    required this.pulse,
-    required this.systolic,
-    required this.diastolic,
-  });
-
-  final img.Image display;
-  final img.Image pulse;
-  final img.Image systolic;
-  final img.Image diastolic;
+SevenSegmentDisplayReadResult _readSevenSegmentImage(String imagePath) {
+  return const SevenSegmentDisplayReader().readFile(imagePath);
 }
 
 class _ScanScreen extends StatefulWidget {
@@ -440,6 +301,10 @@ class _ScanScreen extends StatefulWidget {
 }
 
 class _ScanScreenState extends State<_ScanScreen> {
+  static const _minimumCaptureFrames = 2;
+  static const _maximumCaptureFrames = 3;
+  static const _framePause = Duration(milliseconds: 220);
+
   CameraController? _controller;
   bool _isReady = false;
   bool _isCapturing = false;
@@ -523,16 +388,13 @@ class _ScanScreenState extends State<_ScanScreen> {
     await WidgetsBinding.instance.endOfFrame;
 
     try {
-      final photo = await controller.takePicture();
-      final capturedAt = DateTime.now();
+      final frameResults = await _captureFrameResults(controller);
+      final selectedResult = _selectConsensusResult(frameResults);
       final persistedImage = await _extractionService._persistPhoto(
-        photo.path,
-        capturedAt,
+        selectedResult.imagePath,
+        selectedResult.capturedAt,
       );
-      final result = await _extractionService._extractReadingFromImage(
-        imagePath: persistedImage.path,
-        capturedAt: capturedAt,
-      );
+      final result = selectedResult.copyWith(imagePath: persistedImage.path);
 
       if (!mounted) {
         return;
@@ -546,6 +408,43 @@ class _ScanScreenState extends State<_ScanScreen> {
         _processingTip = null;
       });
     }
+  }
+
+  Future<List<ScanCaptureResult>> _captureFrameResults(
+    CameraController controller,
+  ) async {
+    final results = <ScanCaptureResult>[];
+
+    for (var index = 0; index < _maximumCaptureFrames; index++) {
+      try {
+        final photo = await controller.takePicture();
+        final capturedAt = DateTime.now();
+        final result = await _extractionService._extractReadingFromImage(
+          imagePath: photo.path,
+          capturedAt: capturedAt,
+        );
+        results.add(result);
+
+        if (results.length >= _minimumCaptureFrames &&
+            _hasStableCaptureConsensus(results)) {
+          break;
+        }
+      } catch (_) {
+        if (results.isEmpty) {
+          rethrow;
+        }
+        break;
+      }
+
+      if (index < _maximumCaptureFrames - 1) {
+        await Future<void>.delayed(_framePause);
+      }
+    }
+
+    if (results.isEmpty) {
+      throw StateError('No camera frames were captured.');
+    }
+    return results;
   }
 
   @override
@@ -590,8 +489,8 @@ class _ScanScreenState extends State<_ScanScreen> {
                 duration: const Duration(milliseconds: 220),
                 child: Text(
                   _isCapturing
-                      ? 'Reading the saved photo now. This usually takes a few seconds.'
-                      : 'Keep the monitor display large in frame and avoid glare on the screen. The app now prioritizes the left display area for OCR.',
+                      ? 'Comparing camera frames and extracting the display values.'
+                      : 'Align the monitor display inside the frame and keep reflections off the numbers.',
                   key: ValueKey<String>(
                     _isCapturing ? 'processing-copy' : 'capture-copy',
                   ),
@@ -657,20 +556,83 @@ class _ScanScreenState extends State<_ScanScreen> {
 
     return Stack(
       fit: StackFit.expand,
-      children: [
-        CameraPreview(_controller!),
-        Align(
-          alignment: Alignment.center,
-          child: Container(
-            width: double.infinity,
-            margin: const EdgeInsets.symmetric(horizontal: 18),
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.white70, width: 3),
-              borderRadius: BorderRadius.circular(28),
-            ),
-          ),
-        ),
-      ],
+      children: [CameraPreview(_controller!), const ScanGuidanceOverlay()],
     );
   }
+}
+
+bool _hasStableCaptureConsensus(List<ScanCaptureResult> results) {
+  if (results.length < 2) {
+    return false;
+  }
+
+  final latest = results.last;
+  final previous = results[results.length - 2];
+  if (_sameParsedReading(latest, previous)) {
+    return true;
+  }
+
+  return latest.confidence == ScanConfidenceLevel.high &&
+      latest.parsed.systolic != null &&
+      latest.parsed.diastolic != null &&
+      latest.parsed.pulse != null;
+}
+
+ScanCaptureResult _selectConsensusResult(List<ScanCaptureResult> results) {
+  if (results.length == 1) {
+    return results.single;
+  }
+
+  final completeGroups = <String, List<ScanCaptureResult>>{};
+  for (final result in results) {
+    if (result.parsed.systolic == null ||
+        result.parsed.diastolic == null ||
+        result.parsed.pulse == null) {
+      continue;
+    }
+    completeGroups
+        .putIfAbsent(_readingKey(result), () => <ScanCaptureResult>[])
+        .add(result);
+  }
+
+  final consensusGroups =
+      completeGroups.values.where((group) => group.length > 1).toList()
+        ..sort((left, right) => right.length.compareTo(left.length));
+  if (consensusGroups.isNotEmpty) {
+    final best = _highestConfidenceResult(consensusGroups.first);
+    return best.copyWith(
+      confidence: ScanConfidenceLevel.high,
+      confidenceScore: best.confidenceScore.clamp(0.90, 1).toDouble(),
+      confidenceMessage:
+          'Multiple camera frames agreed on these values. Review before saving.',
+      extractionSource: 'Frame consensus',
+    );
+  }
+
+  return _highestConfidenceResult(results);
+}
+
+ScanCaptureResult _highestConfidenceResult(List<ScanCaptureResult> results) {
+  final sorted = results.toList()
+    ..sort((left, right) {
+      final confidenceComparison = right.confidenceScore.compareTo(
+        left.confidenceScore,
+      );
+      if (confidenceComparison != 0) {
+        return confidenceComparison;
+      }
+      return right.parsed.score.compareTo(left.parsed.score);
+    });
+  return sorted.first;
+}
+
+bool _sameParsedReading(ScanCaptureResult left, ScanCaptureResult right) {
+  return _readingKey(left) == _readingKey(right) &&
+      left.parsed.systolic != null &&
+      left.parsed.diastolic != null &&
+      left.parsed.pulse != null;
+}
+
+String _readingKey(ScanCaptureResult result) {
+  return '${result.parsed.systolic}/${result.parsed.diastolic}/${result.parsed.pulse}';
 }
