@@ -6,6 +6,7 @@ import 'src/app.dart';
 import 'src/data/readings_database.dart';
 import 'src/data/sqlite_reading_repository.dart';
 import 'src/services/capture_and_scan_service.dart';
+import 'src/services/home_widget_sync.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -15,9 +16,15 @@ Future<void> main() async {
     path: p.join(documentsDirectory.path, 'heart_bp.db'),
   );
 
+  final repository = HomeWidgetReadingRepository(
+    SqliteReadingRepository(database),
+    const MethodChannelHomeWidgetSync(),
+  );
+  await repository.syncLatestReading();
+
   runApp(
     HeartBpApp(
-      repository: SqliteReadingRepository(database),
+      repository: repository,
       captureAndScanService: CameraCaptureAndScanService(),
     ),
   );

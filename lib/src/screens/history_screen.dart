@@ -13,10 +13,7 @@ import 'reading_detail_screen.dart';
 final _historyDateTime = DateFormat('MMM d · HH:mm');
 
 class HistoryScreen extends StatefulWidget {
-  const HistoryScreen({
-    super.key,
-    required this.repository,
-  });
+  const HistoryScreen({super.key, required this.repository});
 
   final ReadingRepository repository;
 
@@ -35,9 +32,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
       await Printing.sharePdf(bytes: report.bytes, filename: report.filename);
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not export PDF: $error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not export PDF: $error')));
     } finally {
       if (mounted) setState(() => _isExporting = false);
     }
@@ -55,8 +52,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
                 child: Row(
                   children: [
-                    const LiquidBackButton(),
-                    const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -116,10 +111,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
 }
 
 class _HistoryTile extends StatelessWidget {
-  const _HistoryTile({
-    required this.reading,
-    required this.onTap,
-  });
+  const _HistoryTile({required this.reading, required this.onTap});
 
   final Reading reading;
   final VoidCallback onTap;
@@ -173,9 +165,16 @@ class _HistoryTile extends StatelessWidget {
                     ),
                     const Padding(
                       padding: EdgeInsets.symmetric(horizontal: 8),
-                      child: Text('·', style: TextStyle(color: LiquidTheme.inkFaint)),
+                      child: Text(
+                        '·',
+                        style: TextStyle(color: LiquidTheme.inkFaint),
+                      ),
                     ),
-                    const Icon(Icons.favorite_rounded, size: 12, color: LiquidTheme.accent),
+                    const Icon(
+                      Icons.favorite_rounded,
+                      size: 12,
+                      color: LiquidTheme.accent,
+                    ),
                     const SizedBox(width: 4),
                     Text('${reading.pulse} bpm', style: LiquidTheme.mono),
                   ],
@@ -188,7 +187,10 @@ class _HistoryTile extends StatelessWidget {
             decoration: BoxDecoration(
               color: color.withValues(alpha: 0.14),
               borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: color.withValues(alpha: 0.35), width: 0.8),
+              border: Border.all(
+                color: color.withValues(alpha: 0.35),
+                width: 0.8,
+              ),
             ),
             child: Text(
               reading.pressureLevel.label,
@@ -201,7 +203,11 @@ class _HistoryTile extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 6),
-          const Icon(Icons.chevron_right_rounded, color: LiquidTheme.inkFaint, size: 22),
+          const Icon(
+            Icons.chevron_right_rounded,
+            color: LiquidTheme.inkFaint,
+            size: 22,
+          ),
         ],
       ),
     );
@@ -229,7 +235,11 @@ class _EmptyHistory extends StatelessWidget {
                 opacity: 0.35,
                 blur: 20,
                 shadow: false,
-                child: const Icon(Icons.monitor_heart_rounded, size: 28, color: LiquidTheme.accent),
+                child: const Icon(
+                  Icons.monitor_heart_rounded,
+                  size: 28,
+                  color: LiquidTheme.accent,
+                ),
               ),
               const SizedBox(height: 20),
               Text('Nothing logged yet', style: LiquidTheme.titleL),

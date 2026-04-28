@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="widget_card_background">#46516D</color>
+    <color name="widget_card_stroke">#33FFFFFF</color>
+    <color name="widget_text_primary">#FFFFFFFF</color>
+    <color name="widget_text_muted">#B8BED0</color>
+    <color name="widget_text_faint">#80FFFFFF</color>
+    <color name="widget_accent">#FFFF5D6D</color>
+    <color name="widget_pulse_background">#2EFF5D6D</color>
+    <color name="widget_pulse_stroke">#66FF5D6D</color>
+</resources>

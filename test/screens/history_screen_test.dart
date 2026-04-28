@@ -6,6 +6,7 @@ import 'package:heart_bp/src/data/reading_repository.dart';
 import 'package:heart_bp/src/models/reading.dart';
 import 'package:heart_bp/src/models/reading_draft.dart';
 import 'package:heart_bp/src/screens/history_screen.dart';
+import 'package:heart_bp/src/widgets/liquid_glass.dart';
 
 void main() {
   testWidgets('shows pressure level and SYS/DIA labels for each reading', (
@@ -27,9 +28,7 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: HistoryScreen(repository: repository),
-      ),
+      MaterialApp(home: HistoryScreen(repository: repository)),
     );
 
     await tester.pumpAndSettle();
@@ -37,12 +36,13 @@ void main() {
     expect(find.text('High Stage 1'), findsOneWidget);
     expect(find.text('136/73'), findsOneWidget);
     expect(find.text('62 bpm'), findsOneWidget);
+    expect(find.byType(LiquidBackButton), findsNothing);
   });
 }
 
 class _FakeReadingRepository implements ReadingRepository {
   _FakeReadingRepository({required List<Reading> readings})
-      : _readings = readings;
+    : _readings = readings;
 
   final List<Reading> _readings;
 

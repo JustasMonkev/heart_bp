@@ -11,11 +11,14 @@ import '../theme/liquid_theme.dart';
 import '../theme/pressure_palette.dart';
 import '../widgets/liquid_glass.dart';
 import '../widgets/reading_editor_sheet.dart';
-import 'history_screen.dart';
 import 'manual_entry_screen.dart';
+import 'reading_detail_screen.dart';
 
 final _headerDate = DateFormat('EEE, MMM d');
 final _readingDateTime = DateFormat('MMM d · HH:mm');
+final _sheetDayDate = DateFormat('EEEE, MMMM d');
+final _readingTime = DateFormat('h:mm a');
+final _latestTime = DateFormat('HH:mm');
 final _dayKey = DateFormat('yyyy-MM-dd');
 final _weekdayInitial = DateFormat('E');
 
@@ -35,6 +38,8 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   bool _isSaving = false;
+  bool _isStreakExpanded = false;
+  DateTime? _visibleCalendarMonth;
 
   Future<void> _startScan() async {
     final scanResult = await widget.captureAndScanService.captureReading(
@@ -86,11 +91,38 @@ class _HomeScreenState extends State<HomeScreen> {
     ).showSnackBar(const SnackBar(content: Text('Manual reading saved.')));
   }
 
-  void _openHistory() {
+  void _openReading(Reading reading) {
     Navigator.of(context).push<void>(
       buildHeartRoute<void>(
-        builder: (_) => HistoryScreen(repository: widget.repository),
+        builder: (_) => ReadingDetailScreen(
+          repository: widget.repository,
+          reading: reading,
+        ),
       ),
+    );
+  }
+
+  void _jumpCalendarMonth(int offset, DateTime today) {
+    final current = _visibleCalendarMonth ?? DateTime(today.year, today.month);
+    final next = DateTime(current.year, current.month + offset);
+    final currentMonth = DateTime(today.year, today.month);
+
+    setState(() {
+      _visibleCalendarMonth = next.isAfter(currentMonth) ? currentMonth : next;
+    });
+  }
+
+  Future<void> _showDayReadings(DateTime date, List<Reading> readings) async {
+    final sortedReadings = List<Reading>.from(readings)
+      ..sort((a, b) => a.capturedAt.compareTo(b.capturedAt));
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withValues(alpha: 0.28),
+      builder: (_) => _DayReadingsSheet(date: date, readings: sortedReadings),
     );
   }
 
@@ -106,6 +138,9 @@ class _HomeScreenState extends State<HomeScreen> {
               final readings = snapshot.data ?? const <Reading>[];
               final latest = readings.isNotEmpty ? readings.first : null;
               final summary = _HomeSummary.fromReadings(readings);
+              final visibleCalendarMonth =
+                  _visibleCalendarMonth ??
+                  DateTime(summary.today.year, summary.today.month);
 
               return ListView(
                 padding: const EdgeInsets.fromLTRB(18, 12, 18, 32),
@@ -125,8 +160,22 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                   ),
                   const SizedBox(height: 18),
-                  _TrendCard(summary: summary),
-                  const SizedBox(height: 14),
+                  _StreakCard(
+                    summary: summary,
+                    expanded: _isStreakExpanded,
+                    visibleMonth: visibleCalendarMonth,
+                    onToggle: () {
+                      setState(() => _isStreakExpanded = !_isStreakExpanded);
+                    },
+                    onPreviousMonth: () {
+                      _jumpCalendarMonth(-1, summary.today);
+                    },
+                    onNextMonth: () {
+                      _jumpCalendarMonth(1, summary.today);
+                    },
+                    onDayTap: _showDayReadings,
+                  ),
+                  const SizedBox(height: 18),
                   Row(
                     children: [
                       Expanded(
@@ -182,12 +231,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  GlassButton(
-                    label: 'Open history',
-                    icon: Icons.auto_stories_rounded,
-                    onPressed: _isSaving ? null : _openHistory,
-                  ),
                   const SizedBox(height: 22),
                   Text('RECENT', style: LiquidTheme.eyebrow),
                   const SizedBox(height: 10),
@@ -201,7 +244,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             padding: const EdgeInsets.only(bottom: 10),
                             child: _RecentTile(
                               reading: reading,
-                              onTap: _openHistory,
+                              onTap: () => _openReading(reading),
                             ),
                           ),
                         ),
@@ -266,64 +309,178 @@ class _LatestReadingCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = levelColor(reading.pressureLevel);
 
-    return GlassSurface(
-      radius: 38,
-      padding: const EdgeInsets.fromLTRB(26, 24, 26, 24),
-      opacity: 0.58,
-      blur: 36,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text('LATEST READING', style: LiquidTheme.eyebrow),
-              const Spacer(),
-              _StatusChip(label: reading.pressureLevel.label, color: color),
-            ],
+    return Container(
+      padding: const EdgeInsets.fromLTRB(24, 22, 24, 24),
+      decoration: BoxDecoration(
+        color: const Color(0xFF46516D).withValues(alpha: 0.97),
+        borderRadius: BorderRadius.circular(34),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF17203A).withValues(alpha: 0.28),
+            blurRadius: 34,
+            offset: const Offset(0, 18),
           ),
-          const SizedBox(height: 18),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(reading.systolic.toString(), style: LiquidTheme.numeralXL),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12, left: 6, right: 6),
-                child: Text(
-                  '/',
-                  style: LiquidTheme.numeralXL.copyWith(
-                    color: LiquidTheme.inkFaint,
-                    fontWeight: FontWeight.w300,
+        ],
+      ),
+      child: DefaultTextStyle.merge(
+        style: const TextStyle(color: Colors.white),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.favorite_rounded,
+                  size: 17,
+                  color: LiquidTheme.accentGlow,
+                ),
+                const SizedBox(width: 9),
+                Text(
+                  'HEART BP',
+                  style: LiquidTheme.eyebrow.copyWith(
+                    color: Colors.white.withValues(alpha: 0.68),
+                    fontSize: 13,
+                    letterSpacing: 2.2,
                   ),
                 ),
-              ),
-              Text(reading.diastolic.toString(), style: LiquidTheme.numeralXL),
-              Padding(
-                padding: const EdgeInsets.only(left: 8, bottom: 16),
-                child: Text(
-                  'mmHg',
-                  style: LiquidTheme.bodyMuted.copyWith(fontSize: 16),
+                const Spacer(),
+                Text(
+                  _latestTime.format(reading.capturedAt),
+                  style: LiquidTheme.mono.copyWith(
+                    color: Colors.white.withValues(alpha: 0.5),
+                    fontSize: 18,
+                    letterSpacing: 0,
+                    fontWeight: FontWeight.w400,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
+            const SizedBox(height: 14),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Expanded(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          reading.systolic.toString(),
+                          style: LiquidTheme.numeralXL.copyWith(
+                            color: Colors.white,
+                            fontSize: 68,
+                            letterSpacing: -2.6,
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.only(
+                            left: 5,
+                            right: 5,
+                            bottom: 9,
+                          ),
+                          child: Text(
+                            '/',
+                            style: LiquidTheme.numeralXL.copyWith(
+                              color: Colors.white.withValues(alpha: 0.34),
+                              fontSize: 52,
+                              fontWeight: FontWeight.w300,
+                              letterSpacing: 0,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          reading.diastolic.toString(),
+                          style: LiquidTheme.numeralXL.copyWith(
+                            color: Colors.white,
+                            fontSize: 68,
+                            letterSpacing: -2.6,
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.only(left: 9, bottom: 15),
+                          child: Text(
+                            'mmHg',
+                            style: LiquidTheme.bodyMuted.copyWith(
+                              color: Colors.white.withValues(alpha: 0.56),
+                              fontSize: 17,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                _PulsePill(pulse: reading.pulse),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: color,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    reading.pressureLevel.label,
+                    overflow: TextOverflow.ellipsis,
+                    style: LiquidTheme.titleM.copyWith(
+                      color: color,
+                      fontSize: 19,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PulsePill extends StatelessWidget {
+  const _PulsePill({required this.pulse});
+
+  final int pulse;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 17, vertical: 11),
+      decoration: BoxDecoration(
+        color: LiquidTheme.accent.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: LiquidTheme.accent.withValues(alpha: 0.38)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.favorite_rounded,
+            size: 17,
+            color: LiquidTheme.accentGlow,
           ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              GlassPill(
-                label: '${reading.pulse} BPM',
-                accent: LiquidTheme.ink,
-                leading: const Icon(
-                  Icons.favorite_rounded,
-                  size: 14,
-                  color: LiquidTheme.accent,
-                ),
-              ),
-              const Spacer(),
-              Text(
-                _readingDateTime.format(reading.capturedAt),
-                style: LiquidTheme.bodyMuted.copyWith(fontSize: 16),
-              ),
-            ],
+          const SizedBox(width: 8),
+          Text(
+            '$pulse bpm',
+            style: LiquidTheme.titleM.copyWith(
+              color: Colors.white.withValues(alpha: 0.8),
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ],
       ),
@@ -358,59 +515,557 @@ class _EmptyLatestCard extends StatelessWidget {
   }
 }
 
-class _TrendCard extends StatelessWidget {
-  const _TrendCard({required this.summary});
+class _StreakCard extends StatelessWidget {
+  const _StreakCard({
+    required this.summary,
+    required this.expanded,
+    required this.visibleMonth,
+    required this.onToggle,
+    required this.onPreviousMonth,
+    required this.onNextMonth,
+    required this.onDayTap,
+  });
+
+  final _HomeSummary summary;
+  final bool expanded;
+  final DateTime visibleMonth;
+  final VoidCallback onToggle;
+  final VoidCallback onPreviousMonth;
+  final VoidCallback onNextMonth;
+  final void Function(DateTime date, List<Reading> readings) onDayTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final canGoNext = _isBeforeMonth(visibleMonth, summary.today);
+
+    return GlassSurface(
+      radius: 26,
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+      opacity: 0.5,
+      blur: 28,
+      child: Column(
+        children: [
+          InkWell(
+            onTap: onToggle,
+            borderRadius: BorderRadius.circular(20),
+            child: Padding(
+              padding: const EdgeInsets.all(2),
+              child: Row(
+                children: [
+                  Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: LiquidTheme.accent.withValues(alpha: 0.13),
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(
+                        color: LiquidTheme.accent.withValues(alpha: 0.22),
+                        width: 0.8,
+                      ),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.local_fire_department_rounded,
+                          size: 18,
+                          color: LiquidTheme.accent,
+                        ),
+                        Text(
+                          '${summary.streak}',
+                          style: const TextStyle(
+                            color: LiquidTheme.accent,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                            height: 1,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${summary.streak}-day streak',
+                          style: LiquidTheme.titleM.copyWith(fontSize: 16),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Log today to keep it going.',
+                          style: LiquidTheme.bodyMuted.copyWith(fontSize: 12),
+                        ),
+                        const SizedBox(height: 8),
+                        _LoggedWeekBar(summary: summary),
+                      ],
+                    ),
+                  ),
+                  AnimatedRotation(
+                    turns: expanded ? 0.25 : 0,
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeOutCubic,
+                    child: const Icon(
+                      Icons.chevron_right_rounded,
+                      size: 22,
+                      color: LiquidTheme.inkFaint,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (expanded) ...[
+            const SizedBox(height: 16),
+            Divider(
+              height: 1,
+              thickness: 0.5,
+              color: Colors.black.withValues(alpha: 0.07),
+            ),
+            const SizedBox(height: 14),
+            _StreakCalendar(
+              summary: summary,
+              visibleMonth: visibleMonth,
+              canGoNext: canGoNext,
+              onPreviousMonth: onPreviousMonth,
+              onNextMonth: onNextMonth,
+              onDayTap: onDayTap,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _LoggedWeekBar extends StatelessWidget {
+  const _LoggedWeekBar({required this.summary});
 
   final _HomeSummary summary;
 
   @override
   Widget build(BuildContext context) {
-    final trendColor = summary.delta <= 0
-        ? LiquidTheme.mint
-        : LiquidTheme.accent;
-    return GlassSurface(
-      radius: 34,
-      padding: const EdgeInsets.fromLTRB(22, 22, 22, 18),
-      opacity: 0.54,
-      blur: 32,
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Text('7-DAY SYSTOLIC', style: LiquidTheme.eyebrow),
-              const Spacer(),
-              Text(
-                '${summary.delta <= 0 ? '↘' : '↗'} ${summary.delta.abs()} mmHg',
-                style: LiquidTheme.titleM.copyWith(
-                  color: trendColor,
-                  fontSize: 16,
+    return Row(
+      children: [
+        for (var index = 0; index < summary.loggedWeek.length; index++) ...[
+          Expanded(
+            child: Column(
+              children: [
+                Container(
+                  height: 5,
+                  decoration: BoxDecoration(
+                    color: summary.loggedWeek[index]
+                        ? LiquidTheme.accent.withValues(
+                            alpha: index == summary.loggedWeek.length - 1
+                                ? 1
+                                : 0.55,
+                          )
+                        : LiquidTheme.accent.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(99),
+                  ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          SizedBox(
-            height: 88,
-            child: CustomPaint(
-              painter: _TrendPainter(values: summary.weeklySystolic),
-              child: const SizedBox.expand(),
+                const SizedBox(height: 3),
+                Text(
+                  summary.weekdayLabels[index],
+                  style: LiquidTheme.eyebrow.copyWith(
+                    color: LiquidTheme.inkFaint,
+                    fontSize: 8,
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 10),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: summary.weekdayLabels
-                .map(
-                  (label) => Text(
-                    label,
-                    style: LiquidTheme.eyebrow.copyWith(
-                      color: label == summary.weekdayLabels.last
-                          ? LiquidTheme.ink
+          if (index != summary.loggedWeek.length - 1) const SizedBox(width: 5),
+        ],
+      ],
+    );
+  }
+}
+
+class _StreakCalendar extends StatelessWidget {
+  const _StreakCalendar({
+    required this.summary,
+    required this.visibleMonth,
+    required this.canGoNext,
+    required this.onPreviousMonth,
+    required this.onNextMonth,
+    required this.onDayTap,
+  });
+
+  final _HomeSummary summary;
+  final DateTime visibleMonth;
+  final bool canGoNext;
+  final VoidCallback onPreviousMonth;
+  final VoidCallback onNextMonth;
+  final void Function(DateTime date, List<Reading> readings) onDayTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final monthStart = DateTime(visibleMonth.year, visibleMonth.month);
+    final daysInMonth = DateTime(
+      visibleMonth.year,
+      visibleMonth.month + 1,
+      0,
+    ).day;
+    final leadingEmptyDays = monthStart.weekday - 1;
+    final monthLabel = DateFormat(
+      'MMMM yyyy',
+    ).format(visibleMonth).toUpperCase();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                monthLabel,
+                style: LiquidTheme.eyebrow.copyWith(fontSize: 10),
+              ),
+            ),
+            _CalendarIconButton(
+              key: const ValueKey('calendar-previous-month'),
+              icon: Icons.chevron_left_rounded,
+              onTap: onPreviousMonth,
+            ),
+            const SizedBox(width: 6),
+            _CalendarIconButton(
+              key: const ValueKey('calendar-next-month'),
+              icon: Icons.chevron_right_rounded,
+              onTap: canGoNext ? onNextMonth : null,
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        GridView.count(
+          crossAxisCount: 7,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 4,
+          crossAxisSpacing: 4,
+          children: [
+            for (final day in const ['M', 'T', 'W', 'T', 'F', 'S', 'S'])
+              Center(
+                child: Text(
+                  day,
+                  style: LiquidTheme.eyebrow.copyWith(
+                    color: LiquidTheme.inkFaint,
+                    fontSize: 9,
+                  ),
+                ),
+              ),
+            for (var index = 0; index < leadingEmptyDays; index++)
+              const SizedBox.shrink(),
+            for (var day = 1; day <= daysInMonth; day++)
+              Builder(
+                builder: (context) {
+                  final date = DateTime(
+                    visibleMonth.year,
+                    visibleMonth.month,
+                    day,
+                  );
+                  final readings = summary.readingsByDay[_dayKey.format(date)];
+                  return _CalendarDay(
+                    day: day,
+                    date: date,
+                    readings: readings ?? const <Reading>[],
+                    today: summary.today,
+                    onTap: onDayTap,
+                  );
+                },
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _CalendarIconButton extends StatelessWidget {
+  const _CalendarIconButton({
+    super.key,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onTap != null;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: enabled ? 0.34 : 0.14),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: enabled ? 0.52 : 0.28),
+              width: 0.7,
+            ),
+          ),
+          child: Icon(
+            icon,
+            size: 20,
+            color: enabled ? LiquidTheme.inkSoft : LiquidTheme.inkFaint,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CalendarDay extends StatelessWidget {
+  const _CalendarDay({
+    required this.day,
+    required this.date,
+    required this.readings,
+    required this.today,
+    required this.onTap,
+  });
+
+  final int day;
+  final DateTime date;
+  final List<Reading> readings;
+  final DateTime today;
+  final void Function(DateTime date, List<Reading> readings) onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final isToday = _sameDate(date, today);
+    final isLogged = readings.isNotEmpty;
+    final key = _dayKey.format(date);
+
+    return Semantics(
+      button: true,
+      label:
+          '${DateFormat('MMMM d').format(date)}, ${readings.length} measurements',
+      child: Material(
+        key: ValueKey('calendar-day-$key'),
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => onTap(date, readings),
+          borderRadius: BorderRadius.circular(8),
+          child: Ink(
+            decoration: BoxDecoration(
+              gradient: isToday
+                  ? const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [LiquidTheme.accent, LiquidTheme.accentGlow],
+                    )
+                  : null,
+              color: isToday
+                  ? null
+                  : isLogged
+                  ? LiquidTheme.accent.withValues(alpha: 0.2)
+                  : Colors.black.withValues(alpha: 0.04),
+              borderRadius: BorderRadius.circular(8),
+              border: isToday
+                  ? null
+                  : Border.all(
+                      color: isLogged
+                          ? LiquidTheme.accent.withValues(alpha: 0.3)
+                          : Colors.black.withValues(alpha: 0.06),
+                      width: 0.5,
+                    ),
+            ),
+            child: Stack(
+              children: [
+                Center(
+                  child: Text(
+                    '$day',
+                    style: TextStyle(
+                      color: isToday
+                          ? Colors.white
+                          : isLogged
+                          ? LiquidTheme.accent
                           : LiquidTheme.inkFaint,
+                      fontSize: 9,
+                      fontWeight: isToday ? FontWeight.w700 : FontWeight.w500,
                     ),
                   ),
-                )
-                .toList(),
+                ),
+                if (readings.length > 1)
+                  Positioned(
+                    right: 4,
+                    bottom: 3,
+                    child: Container(
+                      width: 5,
+                      height: 5,
+                      decoration: BoxDecoration(
+                        color: isToday ? Colors.white : LiquidTheme.accent,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DayReadingsSheet extends StatelessWidget {
+  const _DayReadingsSheet({required this.date, required this.readings});
+
+  final DateTime date;
+  final List<Reading> readings;
+
+  @override
+  Widget build(BuildContext context) {
+    final countLabel = readings.length == 1
+        ? '1 measurement'
+        : '${readings.length} measurements';
+    final maxHeight = math.min(MediaQuery.sizeOf(context).height * 0.72, 560.0);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        child: GlassSurface(
+          radius: 32,
+          padding: const EdgeInsets.fromLTRB(22, 12, 22, 22),
+          opacity: 0.66,
+          blur: 36,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: maxHeight),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 42,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _sheetDayDate.format(date),
+                            style: LiquidTheme.titleL,
+                          ),
+                          const SizedBox(height: 3),
+                          Text(countLabel, style: LiquidTheme.bodyMuted),
+                        ],
+                      ),
+                    ),
+                    _CalendarIconButton(
+                      icon: Icons.close_rounded,
+                      onTap: () => Navigator.of(context).pop(),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                if (readings.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      'No measurements were logged on this day.',
+                      style: LiquidTheme.body,
+                    ),
+                  )
+                else
+                  Flexible(
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      physics: const BouncingScrollPhysics(),
+                      itemCount: readings.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 10),
+                      itemBuilder: (context, index) {
+                        return _DayReadingTile(reading: readings[index]);
+                      },
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DayReadingTile extends StatelessWidget {
+  const _DayReadingTile({required this.reading});
+
+  final Reading reading;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = levelColor(reading.pressureLevel);
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.34),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.44)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 4,
+            height: 52,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(99),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      reading.bloodPressureLabel,
+                      style: LiquidTheme.titleL.copyWith(fontSize: 24),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _readingTime.format(reading.capturedAt),
+                        overflow: TextOverflow.ellipsis,
+                        style: LiquidTheme.bodyMuted.copyWith(fontSize: 12),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(reading.pulseDisplayLabel, style: LiquidTheme.bodyMuted),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: _StatusChip(
+              label: reading.pressureLevel.label,
+              color: color,
+              compact: true,
+            ),
           ),
         ],
       ),
@@ -622,90 +1277,6 @@ class _StatusChip extends StatelessWidget {
   }
 }
 
-class _TrendPainter extends CustomPainter {
-  const _TrendPainter({required this.values});
-
-  final List<int?> values;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final plottedValues = <({int index, int value})>[];
-    for (var index = 0; index < values.length; index++) {
-      final value = values[index];
-      if (value != null) {
-        plottedValues.add((index: index, value: value));
-      }
-    }
-    if (plottedValues.isEmpty) return;
-
-    final maxValue = plottedValues
-        .map((item) => item.value)
-        .reduce(math.max)
-        .toDouble();
-    final minValue = plottedValues
-        .map((item) => item.value)
-        .reduce(math.min)
-        .toDouble();
-    final span = math.max(1.0, maxValue - minValue);
-    final step = values.length == 1 ? 0.0 : size.width / (values.length - 1);
-    final points = <Offset>[];
-
-    for (final item in plottedValues) {
-      final normalized = (item.value - minValue) / span;
-      final y = size.height - (normalized * (size.height - 8)) - 4;
-      points.add(Offset(step * item.index, y));
-    }
-
-    final fillPath = Path()..moveTo(points.first.dx, size.height);
-    fillPath.lineTo(points.first.dx, points.first.dy);
-    for (var i = 1; i < points.length; i++) {
-      final previous = points[i - 1];
-      final current = points[i];
-      final controlX = (previous.dx + current.dx) / 2;
-      fillPath.quadraticBezierTo(controlX, previous.dy, current.dx, current.dy);
-    }
-    fillPath.lineTo(points.last.dx, size.height);
-    fillPath.close();
-
-    canvas.drawPath(
-      fillPath,
-      Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            LiquidTheme.accent.withValues(alpha: 0.16),
-            LiquidTheme.accent.withValues(alpha: 0.02),
-          ],
-        ).createShader(Offset.zero & size),
-    );
-
-    final linePath = Path()..moveTo(points.first.dx, points.first.dy);
-    for (var i = 1; i < points.length; i++) {
-      final previous = points[i - 1];
-      final current = points[i];
-      final controlX = (previous.dx + current.dx) / 2;
-      linePath.quadraticBezierTo(controlX, previous.dy, current.dx, current.dy);
-    }
-
-    canvas.drawPath(
-      linePath,
-      Paint()
-        ..color = LiquidTheme.accent
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 3
-        ..strokeCap = StrokeCap.round,
-    );
-
-    canvas.drawCircle(points.last, 5.5, Paint()..color = LiquidTheme.accent);
-  }
-
-  @override
-  bool shouldRepaint(covariant _TrendPainter oldDelegate) {
-    return oldDelegate.values != values;
-  }
-}
-
 int _avg(Iterable<int> values, int fallback) {
   if (values.isEmpty) return fallback;
   var sum = 0;
@@ -719,22 +1290,26 @@ int _avg(Iterable<int> values, int fallback) {
 
 class _HomeSummary {
   const _HomeSummary({
-    required this.weeklySystolic,
     required this.weekdayLabels,
+    required this.loggedWeek,
+    required this.readingsByDay,
+    required this.today,
+    required this.streak,
     required this.avgSystolic,
     required this.avgDiastolic,
     required this.avgPulse,
-    required this.delta,
     required this.insightTitle,
     required this.insightBody,
   });
 
-  final List<int?> weeklySystolic;
   final List<String> weekdayLabels;
+  final List<bool> loggedWeek;
+  final Map<String, List<Reading>> readingsByDay;
+  final DateTime today;
+  final int streak;
   final int avgSystolic;
   final int avgDiastolic;
   final int avgPulse;
-  final int delta;
   final String insightTitle;
   final String insightBody;
 
@@ -748,28 +1323,26 @@ class _HomeSummary {
 
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final firstVisibleDay = today.subtract(const Duration(days: 6));
-    final systolicByDate = <String, List<int>>{};
+    final loggedDays = <String>{};
+    final readingsByDay = <String, List<Reading>>{};
     for (final reading in ordered) {
       final capturedDay = DateTime(
         reading.capturedAt.year,
         reading.capturedAt.month,
         reading.capturedAt.day,
       );
-      if (capturedDay.isBefore(firstVisibleDay) || capturedDay.isAfter(today)) {
-        continue;
-      }
       final key = _dayKey.format(capturedDay);
-      systolicByDate.putIfAbsent(key, () => <int>[]).add(reading.systolic);
+      loggedDays.add(key);
+      readingsByDay.putIfAbsent(key, () => <Reading>[]).add(reading);
     }
 
-    final weekly = <int?>[];
+    final completedDay = today.subtract(const Duration(days: 1));
     final labels = <String>[];
+    final loggedWeek = <bool>[];
     for (var index = 6; index >= 0; index--) {
-      final day = today.subtract(Duration(days: index));
-      final dayValues = systolicByDate[_dayKey.format(day)];
-      weekly.add(dayValues == null ? null : _avg(dayValues, 120));
+      final day = completedDay.subtract(Duration(days: index));
       labels.add(_weekdayInitial.format(day).substring(0, 1));
+      loggedWeek.add(loggedDays.contains(_dayKey.format(day)));
     }
 
     final avgSystolic = _avg(recent.map((r) => r.systolic), 120);
@@ -793,20 +1366,37 @@ class _HomeSummary {
         : 'Add a few readings across the week to unlock stronger trend insights.';
 
     return _HomeSummary(
-      weeklySystolic: weekly,
       weekdayLabels: labels,
+      loggedWeek: loggedWeek,
+      readingsByDay: {
+        for (final entry in readingsByDay.entries)
+          entry.key: List<Reading>.unmodifiable(entry.value),
+      },
+      today: today,
+      streak: _currentStreak(loggedDays, completedDay),
       avgSystolic: avgSystolic,
       avgDiastolic: avgDiastolic,
       avgPulse: avgPulse,
-      delta: _weeklyDelta(weekly),
       insightTitle: insightTitle,
       insightBody: insightBody,
     );
   }
 }
 
-int _weeklyDelta(List<int?> weekly) {
-  final actualValues = weekly.whereType<int>().toList(growable: false);
-  if (actualValues.length < 2) return 0;
-  return actualValues.last - actualValues.first;
+bool _sameDate(DateTime a, DateTime b) {
+  return a.year == b.year && a.month == b.month && a.day == b.day;
+}
+
+bool _isBeforeMonth(DateTime a, DateTime b) {
+  return a.year < b.year || (a.year == b.year && a.month < b.month);
+}
+
+int _currentStreak(Set<String> loggedDays, DateTime today) {
+  var count = 0;
+  while (loggedDays.contains(
+    _dayKey.format(today.subtract(Duration(days: count))),
+  )) {
+    count++;
+  }
+  return count;
 }

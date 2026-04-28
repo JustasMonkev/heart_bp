@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'data/reading_repository.dart';
-import 'screens/home_screen.dart';
+import 'screens/app_shell.dart';
 import 'services/capture_and_scan_service.dart';
+import 'services/pdf_exporter.dart';
 import 'theme/liquid_theme.dart';
 
 class HeartBpApp extends StatelessWidget {
@@ -11,10 +12,12 @@ class HeartBpApp extends StatelessWidget {
     super.key,
     required this.repository,
     required this.captureAndScanService,
+    this.pdfExporter,
   });
 
   final ReadingRepository repository;
   final CaptureAndScanService captureAndScanService;
+  final PdfExporter? pdfExporter;
 
   @override
   Widget build(BuildContext context) {
@@ -79,9 +82,10 @@ class HeartBpApp extends StatelessWidget {
           ),
         ),
       ),
-      home: HomeScreen(
+      home: AppShell(
         repository: repository,
         captureAndScanService: captureAndScanService,
+        pdfExporter: pdfExporter ?? const PrintingPdfExporter(),
       ),
     );
   }
